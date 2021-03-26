@@ -1,0 +1,12 @@
+ingress:
+  useDefault: true
+  host: "INJECT_USER_DOMAIN"
+  tls:
+    enable: true
+    hostSecretName: coder-root-cert
+    devurlsHostSecretName: coder-devurls-cert
+  additionalAnnotations:
+    - "cert-manager.io/issuer: letsencrypt"
+
+devurls:
+  host: "*.INJECT_USER_DOMAIN"

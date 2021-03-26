@@ -1,0 +1,11 @@
+ingress:
+  useDefault: true
+  host: "coder.google-cloud.bpmct.ksdns.io"
+  tls:
+    enable: true
+    hostSecretName: coder-root-cert
+    devurlsHostSecretName: coder-devurls-cert
+  additionalAnnotations:
+    - "cert-manager.io/cluster-issuer: letsencrypt"
+# devurls:
+#   host: "*.coder.google-cloud.bpmct.usw1.k8g8.com"

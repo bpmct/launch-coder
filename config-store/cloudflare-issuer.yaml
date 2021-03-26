@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cloudflare-api-token-secret
+  namespace: INJECT_USER_NAMESPACE
+type: Opaque
+stringData:
+    api-token: INJECT_CLOUDFLARE_API
+
+---
+apiVersion: cert-manager.io/v1alpha2
+kind: Issuer
+metadata:
+  name: letsencrypt
+  namespace: INJECT_USER_NAMESPACE
+spec:
+  acme:
+    email: INJECT_USER_EMAIL
+    server: "https://acme-v02.api.letsencrypt.org/directory"
+    privateKeySecretRef:
+      name: letsencrypt-account-key
+    solvers:
+    - dns01:
+        cloudflare:
+          email: INJECT_CLOUDFLARE_EMAIL
+          apiTokenSecretRef:
+            name: cloudflare-api-token-secret
+            key: api-token
+      selector:
+        dnsZones:
+          - 'INJECT_USER_DOMAIN'
