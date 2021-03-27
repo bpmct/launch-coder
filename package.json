@@ -2,7 +2,14 @@
   "name": "auto-coder",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "main": "src/index.js",
+  "bin": {
+    "@bpmct/launch-coder": "bin/launch-coder",
+    "launch-coder": "bin/launch-coder"
+  },
+  "publishConfig": {
+    "access": "restricted"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon index.js"
@@ -10,10 +17,14 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "dotenv": "^8.2.0",
     "nodemon": "^2.0.7"
   },
   "dependencies": {
-    "promisify-child-process": "^4.1.1"
+    "dotenv": "^8.2.0",
+    "esm": "^3.2.25",
+    "execa": "^5.0.0",
+    "promisify-child-process": "^4.1.1",
+    "yargs": "^16.2.0",
+    "yargs-interactive": "^3.0.0"
   }
 }
