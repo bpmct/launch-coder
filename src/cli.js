@@ -119,7 +119,7 @@ export async function cli(args) {
 
   const checkGoogleCloud = await runHelperScript("detectGoogleCloud");
 
-  if (!argv.method && checkGoogleCloud && checkGoogleCloud.stdout == "true") {
+  if (!argv.method && checkGoogleCloud && checkGoogleCloud == "true") {
     console.log(
       "Auto-detected you are on Google Cloud, so we'll deploy there 🚀\nYou can manually change this by executing with --method"
     );
