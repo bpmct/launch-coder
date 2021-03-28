@@ -117,14 +117,24 @@ export async function cli(args) {
 
   // detect if we are on google cloud :)
 
-  const checkGoogleCloud = await runHelperScript("detectGoogleCloud");
+  const checkCloudShell = await runHelperScript("detectCloudShell");
 
-  if (!argv.method && checkGoogleCloud && checkGoogleCloud == "true") {
-    argv.method == "gcloud";
-    console.log(
-      "Auto-detected you are on Google Cloud, so we'll deploy there 🚀\nYou can manually change this by executing with --method"
-    );
-  } else if (argv.method == undefined) {
+  if (!argv.method && checkCloudShell && checkCloudShell == "true") {
+    console.log("It looks like you are using Google Cloud Shell 🚀");
+
+    const gcloudCheck = await inquirer.prompt({
+      type: "confirm",
+      default: true,
+      name: "confirm",
+      message: "Do you want to deploy a new Coder cluster?",
+    });
+
+    if (gcloudCheck.confirm) {
+      argv.method = "gcloud";
+    }
+  }
+
+  if (argv.method == undefined) {
     argv = {
       ...argv,
       ...(await inquirer.prompt({
@@ -149,7 +159,6 @@ export async function cli(args) {
     // ensure gcloud-cli is installed and active
 
     // TODO: add better user education on what the prereqs are
-    console.log("Checking for prerequisites...");
     try {
       await runHelperScript("googleCloudPrereqs");
       console.log("✅", "You seem to have all the dependencies installed!");
