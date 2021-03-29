@@ -1,6 +1,6 @@
 # launch-coder
 
-⚠️: This was a hackathon project and is not recommended for production use or in sensative environments.
+⚠️: This was a hackathon project and is not recommended for production deployments or in sensative environments.
 
 ---
 
