@@ -5,7 +5,7 @@ const { exec, spawn, fork, execFile } = require("promisify-child-process");
 
 let inject = {
   user_domain: `newest.coding.pics`,
-  user_email: "victorialslocum@gmail.com",
+  // user_email: "victorialslocum@gmail.com",
   user_namespace: "script",
   cloudflare_email: process.env.CLOUDFLARE_EMAIL,
   cloudflare_api: process.env.CLOUDFLARE_TOKEN,

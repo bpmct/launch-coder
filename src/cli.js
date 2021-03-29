@@ -8,6 +8,10 @@ const execa = require("execa");
 // reading and writing in out/ folder
 const fs = require("fs");
 
+// TODO change this
+const cloudflareEmail = "me@bpmct.net";
+const cloudflareDomain = "coding.pics";
+
 require("dotenv").config();
 
 const runHelperScript = async (filename, params) => {
@@ -89,6 +93,11 @@ export async function cli(args) {
       type: "string",
       alias: "n",
       description: "Name for Coder subdomain",
+    })
+    .option("namespace", {
+      type: "string",
+      default: "coder",
+      description: "Namespace for Coder",
     })
     .option("gcloud-project-id", {
       type: "string",
@@ -206,9 +215,6 @@ export async function cli(args) {
       } catch (err) {
         // reset projects list
         projects = [];
-
-        // TODO: ensure it is actually no biggie
-        console.log("Ran into an error fetching your projects... No biggie 🙂");
       }
 
       // show a select field if we found a list
@@ -227,7 +233,11 @@ export async function cli(args) {
             choices: projects,
           })),
         };
-      } else
+      } else {
+        console.log(
+          "🤔 We couldn't determine if you have any Google Cloud Projects.\n",
+          "\t➡️ Create one here: https://console.cloud.google.com/projectcreate"
+        );
         argv = {
           ...argv,
           ...(await inquirer.prompt({
@@ -251,9 +261,12 @@ export async function cli(args) {
             ],
           })),
         };
+      }
     }
 
     let gCloudCommand = generateGoogleClusterCommand(argv);
+
+    // TODO: add info on what this cluster means
 
     // TODO: impliment pricing calculations with Google API
     let pricing_info = "";
@@ -300,9 +313,9 @@ export async function cli(args) {
 
       if (!runCommand.runIt) {
         console.log(
-          `\n\nOk :) Feel free to modify the command as needed, run it yourself, then you can run "launch-coder --mode k8s" to install Coder on the cluster you manually created`
+          `\n\nOk :) Feel free to modify the command as needed, run it yourself, then you can run "launch-coder --method k8s" to install Coder on the cluster you manually created`
         );
-        return 0;
+        return;
       }
     }
 
@@ -332,12 +345,17 @@ export async function cli(args) {
     );
     await fs.chmodSync(argv.saveDir + "/createCluster.sh", "755");
 
+    // TODO: find a way to actually make live updates work
+    // or point the user to the URL to watch live.
+    // ex. https://console.cloud.google.com/kubernetes/clusters/details/us-central1-a/coder/details?project=kubernetes-cluster-302420
+    // we have all the info
     console.log("\n⏳ Creating your cluster. This will take a few minutes...");
 
     try {
       const subprocess = execa("/bin/sh", [argv.saveDir + "/createCluster.sh"]);
       subprocess.stdout.pipe(process.stdout);
       const { stdout } = await subprocess;
+      // TODO: consolidate the spacers
       console.log("------------");
       console.log(
         "✅",
@@ -375,9 +393,9 @@ export async function cli(args) {
     // TODO: add checks to ensure the user has a cluster,
     // and it has the necessary stuff for Coder
     console.log(
-      "This script does not currently verify that you cluster is ready for Coder yet.\n\nWe recommend checking the docs before continuing:"
+      "This script does not currently verify that your cluster is ready for Coder.\n\nWe recommend checking the docs before continuing:"
     );
-    console.log("\t➡️ https://coder.com/docs/setup/requirements");
+    console.log("\t➡️ https://coder.com/docs/setup/requirements\n");
 
     if (!argv.skipConfirmPrompts) {
       const runCommand = await inquirer.prompt({
@@ -406,7 +424,7 @@ export async function cli(args) {
         message: "What type of domain would you like to use?",
         choices: [
           {
-            name: `A free domain from Coder (ex. [myname].${process.env.CLOUDFLARE_DOMAIN})`,
+            name: `A free domain from Coder (ex. [myname].${cloudflareDomain})`,
             value: "auto",
           },
           {
@@ -420,13 +438,40 @@ export async function cli(args) {
         ],
       })),
     };
+  } else {
+    console.log("------------");
   }
 
   // validate domainType
   if (argv.domainType == "auto") {
-    console.log("AUTOMA");
+    // check if we have the cloudflare token
+    if (!process.env.DOMAIN_TOKEN) {
+      console.log(
+        "\n🔒 At this time, you need a special token from a Coder rep to get a subdomain\n" +
+          "For more info, join our Slack Community: https://cdr.co/join-community"
+      );
+      return;
+    }
+
+    // sha256 validate the token
+    // used for verifying domain token
+    var sha256 = require("js-sha256");
+
+    // verify the token
+    // TODO: potentially do this server-side so that expired tokens
+    // don't get improperly verified on an old local version
+    if (
+      sha256(process.env.DOMAIN_TOKEN) !=
+      "7d3eb96148c592b64ddfb4f3038a329acc22ea94669780dfa9de85b768ed27b1"
+    ) {
+      console.log("\n❌ The domain token you supplied is not valid.");
+      return;
+    }
+
+    // hello
   } else if (argv.domainType == "cloud-dns") {
     console.log("Well, this is coming soon 💀");
+    return 0;
   } else if (argv.domainType == "none") {
     console.log(
       "\nWarning: This means you can't use Coder with DevURLs, a primary way of accessing web services\ninside of a Coder Workspace:\n",
@@ -435,7 +480,7 @@ export async function cli(args) {
     );
 
     console.log(
-      "You can always add a domain later, and use a custom provider via our docs."
+      "You can always add a domain later, and use a custom provider via our docs.\n"
     );
 
     // TODO: add confirmations
@@ -447,5 +492,7 @@ export async function cli(args) {
 
   // install and access Coder
 
+  // TODO: tell the user they can save this to a PRIVATE
+  // repo in GIT (maybe idk if that is bad practice)
   console.log("\n\nat the end with a long argv:", Object.keys(argv).length);
 }
