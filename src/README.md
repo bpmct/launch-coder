@@ -2,7 +2,7 @@
 
 Preferred environment: Google Cloud Shell
 
-How to use:
+## How to use
 
 ```sh
 launch-coder --help
