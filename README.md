@@ -9,7 +9,7 @@ Launch [Coder](https://coder.com) in a simple way. It can:
 - Create the recommended Google Cloud Cluster for you
 - Install Coder with an automatic domain name: `[yourname].coding.pics`
 
-Preferred environment: Google Cloud Shell
+Preferred environment: Google Cloud Shell. It just works.
 
 ## How to use
 
