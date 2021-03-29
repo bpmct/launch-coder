@@ -35,4 +35,14 @@ launch-coder
 
 launch-coder will not install or provision anything without your permission :)
 
+## Troubleshooting
+
+On non-public Dev URLs: `An internal server error occurred`: 
+
+- This is an error I get frequently with Dev URLs, GKE, and CloudFlare domains, and it always seems to go away.
+  - Re-create Dev URL
+  - Re create environment
+  - Wait patiently
+  - Last resort: Make Dev URL public
+
 Questions? Join Slack [https://cdr.co/join-community](https://cdr.co/join-community)
