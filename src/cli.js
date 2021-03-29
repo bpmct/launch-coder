@@ -770,7 +770,7 @@ export async function cli(args) {
     // very sad repeated code :(
     // i wanted 2 working options
     let installScript = await fs.readFile(
-      __dirname + "/../config-store/update-no-domain.sh",
+      __dirname + "/../config-store/update-coder-no-domain.sh",
       "utf8"
     );
 
