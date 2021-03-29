@@ -1,3 +1,4 @@
+#!/bin/sh
 # Check prereqs. This can potentially search for specific version #s down the road.
 
 if ! [ -x "$(command -v git)" ]; then

@@ -5,12 +5,17 @@ import { exit } from "yargs";
 const { hideBin } = require("yargs/helpers");
 const execa = require("execa");
 
-// reading and writing in out/ folder
-const fs = require("fs");
+// reading and writing in scripts for the user
+const fs = require("fs").promises;
 
-// TODO change this
+// API calls
+const axios = require("axios").default;
+
+// this data isn't exactly confidental, but is necessary for the program to run
+// TODO: make this accessible via an external endpoint or something
 const cloudflareEmail = "me@bpmct.net";
 const cloudflareDomain = "coding.pics";
+const cloudflareZone = "d8a2eda8c28877a96a209af791f739c8";
 
 require("dotenv").config();
 
@@ -27,6 +32,25 @@ const runHelperScript = async (filename, params) => {
     throw err;
     return;
   }
+};
+
+const createProjectDir = async (saveDir) => {
+  // TODO: create different folders for each session
+  console.log(
+    "💾 FYI: Scripts & config are being saved in: " +
+      saveDir +
+      "\nfor future use\n"
+  );
+
+  // create our out/ file to hold our creation script, among other things
+  await execa("mkdir", ["-p", saveDir]).catch((err) => {
+    console.log(err);
+  });
+
+  // git init (or re-init so the user can easily source-control)
+  await execa("git", ["init", saveDir]);
+
+  return true;
 };
 
 const generateGoogleClusterCommand = (argv) => {
@@ -178,6 +202,12 @@ export async function cli(args) {
     };
   }
 
+  // switch to the absolute path of the home directory if the user included ~/
+  if (argv.saveDir.startsWith("~/")) {
+    const userHome = require("os").homedir();
+    argv.saveDir = argv.saveDir.replace("~/", userHome + "/");
+  }
+
   if (argv.method == "gcloud") {
     // ensure gcloud-cli is installed and active
 
@@ -319,31 +349,14 @@ export async function cli(args) {
       }
     }
 
-    // TODO: create different folders for each session
-    console.log(
-      "💾 FYI: All of these scripts are being saved in: " + argv.saveDir + "\n"
-    );
-
-    // switch to the absolute path of the home directory if the user included ~/
-    if (argv.saveDir.startsWith("~/")) {
-      const userHome = require("os").homedir();
-      argv.saveDir = argv.saveDir.replace("~/", userHome + "/");
-    }
-
-    // create our out/ file to hold our creation script, among other things
-    await execa("mkdir", ["-p", argv.saveDir]).catch((err) => {
-      console.log(err);
-    });
-
-    // git init (or re-init so the user can easily source-control)
-    await execa("git", ["init", argv.saveDir]);
+    await createProjectDir(argv.saveDir);
 
     // add our lovely script to the out folder
-    fs.writeFileSync(
-      argv.saveDir + "/createCluster.sh",
+    await fs.writeFile(
+      argv.saveDir + "/create-cluster.sh",
       "#!/bin/sh\n" + gCloudCommand
     );
-    await fs.chmodSync(argv.saveDir + "/createCluster.sh", "755");
+    await fs.chmod(argv.saveDir + "/create-cluster.sh", "755");
 
     // TODO: find a way to actually make live updates work
     // or point the user to the URL to watch live.
@@ -352,7 +365,9 @@ export async function cli(args) {
     console.log("\n⏳ Creating your cluster. This will take a few minutes...");
 
     try {
-      const subprocess = execa("/bin/sh", [argv.saveDir + "/createCluster.sh"]);
+      const subprocess = execa("/bin/sh", [
+        argv.saveDir + "/create-cluster.sh",
+      ]);
       subprocess.stdout.pipe(process.stdout);
       const { stdout } = await subprocess;
       // TODO: consolidate the spacers
@@ -468,7 +483,255 @@ export async function cli(args) {
       return;
     }
 
-    // hello
+    const validateName = (name) => {
+      // TODO: possibly add error message here
+      var regex = new RegExp("^[a-zA-Z]+[a-zA-Z0-9\\-]*$");
+      if (!regex.test(name)) {
+        console.log("❗ Please enter a valid name (ex. `acme-co`)");
+        return false;
+      }
+      return true;
+    };
+
+    // determine which type of domain to use
+    if (!argv.name) {
+      argv = {
+        ...argv,
+        ...(await inquirer.prompt({
+          type: "input",
+          name: "name",
+          message: `Enter a name for your Coder deployment (____.${cloudflareDomain}):`,
+          validate: validateName,
+        })),
+      };
+    } else {
+      validateName(argv.name);
+    }
+    const domainName = argv.name + "." + cloudflareDomain;
+
+    // ensure this domain has not been used
+    try {
+      const domainSearch = await axios.request({
+        method: "GET",
+        url: `https://api.cloudflare.com/client/v4/zones/${cloudflareZone}/dns_records?name=${encodeURIComponent(
+          domainName
+        )}`,
+        headers: {
+          Authorization: `Bearer ${process.env.DOMAIN_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      });
+      if (domainSearch.data.result.length) {
+        console.log(
+          `\nError: The domain ${domainName} has been used before. Use another or contact us at https://cdr.co/join-community`
+        );
+        return;
+      }
+    } catch (err) {
+      console.log(`Error connecting to CloudFlare:`, err);
+      return;
+    }
+
+    // create dir for our files
+    // TODO: make this a bit smarter and only run if method == "k8s" as this is being done in gcloud
+    await createProjectDir(argv.saveDir);
+
+    // get the base config
+    let issuer = await fs.readFile(
+      __dirname + "/../config-store/cloudflare-issuer.yaml",
+      "utf8"
+    );
+    let helm = await fs.readFile(
+      __dirname + "/../config-store/helm-values.yaml",
+      "utf8"
+    );
+
+    // add our values to the sample file
+    // TODO: add validation to all these values
+    helm = helm.split("INJECT_USER_DOMAIN").join(domainName);
+    issuer = issuer.split("INJECT_USER_NAMESPACE").join(argv.namespace);
+    issuer = issuer
+      .split("INJECT_CLOUDFLARE_API")
+      .join(process.env.DOMAIN_TOKEN);
+    issuer = issuer.split("INJECT_USER_EMAIL").join(cloudflareEmail);
+    issuer = issuer.split("INJECT_USER_DOMAIN").join(domainName);
+    issuer = issuer.split("INJECT_CLOUDFLARE_EMAIL").join(cloudflareEmail);
+
+    if (issuer.includes("INJECT_") || helm.includes("INJECT_")) {
+      console.log(
+        "❌",
+        "Information was not injected into the files correctly. An error occured."
+      );
+      return;
+    }
+    // write the issuer and helm config to a file with a trailing newline
+    try {
+      await fs.writeFile(argv.saveDir + "/issuer.yaml", issuer + "\n");
+      await fs.writeFile(argv.saveDir + "/values.yaml", helm + "\n");
+    } catch (err) {
+      console.log("❌ An error occured writing the config files", err);
+    }
+
+    console.log(
+      "\n✅ Created the following config files:\n",
+      "\t📄 issuer.yaml: Configures a LetsEncrypt issuer for our domain\n",
+      "\t📄 values.yaml: Values for our Coder helm chart, telling it our URL and to point to the issuer\n"
+    );
+
+    // TODO: confirm cert-manager exists first
+    console.log(
+      "We need need to deploy cert-manager 1.0.1 to work with a domain. If you already have it installed, we can re-deploy harmlessly."
+    );
+
+    if (!argv.skipConfirmPrompts) {
+      const runCommand = await inquirer.prompt({
+        type: "confirm",
+        default: true,
+        name: "runIt",
+        message: "Deploy cert-manager on your cluster?",
+      });
+
+      if (!runCommand.runIt) {
+        console.log(
+          `\nCancelled the install. If you have any questions, feel free reach out on Slack:\n\t➡️ https://cdr.co/join-community\n`
+        );
+        return 0;
+      }
+    }
+
+    try {
+      console.log(
+        "\n⏳ Installing cert-manager. This will take a couple minutes..."
+      );
+      // TODO: confirm this better.
+      const checkCertManager = await runHelperScript("installCertManager");
+      // remove any weird spaces
+      const certManagerPods = checkCertManager.split(" ").join("");
+
+      if (certManagerPods >= 3) console.log("✅", "Installed cert-manager");
+      else {
+        throw "could not detect pods running";
+      }
+    } catch (err) {
+      console.log("❌", "An error occured installing cert-manager:", err);
+      return;
+    }
+
+    let installScript = await fs.readFile(
+      __dirname + "/../config-store/update-coder.sh",
+      "utf8"
+    );
+    // add our values to the sample file
+    // TODO: add validation to all these values
+    installScript = installScript
+      .split("INJECT_NAMESPACE")
+      .join(argv.namespace);
+    installScript = installScript.split("INJECT_SAVEDIR").join(argv.saveDir);
+
+    // ensure we injected everything OK
+    if (installScript.includes("INJECT_")) {
+      console.log(
+        "❌",
+        "Information was not injected into the install script correctly. An error occured."
+      );
+      return;
+    }
+
+    try {
+      await fs.writeFile(argv.saveDir + "/update-coder.sh", installScript);
+      await fs.chmod(argv.saveDir + "/update-coder.sh", "755");
+    } catch (err) {
+      console.log("❌ An error occured writing the install script", err);
+    }
+
+    console.log(
+      "\n\n✅ Created an install/upgrade script that:\n",
+      "\t🌎 Deploys our issuer (issuer.yaml)\n",
+      "\t📊 Adds/updates the Coder helm chart\n",
+      `\t🚀 Installs/upgrades Coder with our values (values.yaml)\n\n` +
+        `💻 Preview it at: ${argv.saveDir}/update-coder.sh\n`
+    );
+
+    if (!argv.skipConfirmPrompts) {
+      const runCommand = await inquirer.prompt({
+        type: "confirm",
+        default: true,
+        name: "runIt",
+        message: "Do you want to run this command and install Coder?",
+      });
+
+      if (!runCommand.runIt) {
+        console.log(
+          `\n\nOk :) Feel free to modify the command as needed and run it yourself.`
+        );
+        return;
+      }
+    }
+
+    const subprocess = execa("/bin/sh", [argv.saveDir + "/update-coder.sh"]);
+    console.log("------------");
+
+    subprocess.stdout.pipe(process.stdout);
+    const { stdout } = await subprocess;
+    // TODO: consolidate the spacers
+    console.log("------------");
+
+    console.log("\n⏳ Setting up the domain...");
+
+    // fetch our admin password now, but save it for later
+    const adminPassword = await runHelperScript("getAdminPassword");
+
+    const coderIP = await runHelperScript("getCoderIP").catch((err) => {
+      console.log(
+        "Error fetching the IP address for your Coder deployment. We can't set up the DNS records :("
+      );
+      return 1;
+    });
+
+    // set up DNS records to point the subdomain to the Coder IP
+    try {
+      // add record for root URL
+      await axios.request({
+        method: "POST",
+        url: `https://api.cloudflare.com/client/v4/zones/${cloudflareZone}/dns_records`,
+        headers: {
+          Authorization: `Bearer ${process.env.DOMAIN_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        data: {
+          type: "A",
+          name: argv.name,
+          content: coderIP,
+          ttl: 1,
+          proxied: false,
+        },
+      });
+      await axios.request({
+        method: "POST",
+        url: `https://api.cloudflare.com/client/v4/zones/${cloudflareZone}/dns_records`,
+        headers: {
+          Authorization: `Bearer ${process.env.DOMAIN_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        data: {
+          type: "A",
+          name: "*." + argv.name,
+          content: coderIP,
+          ttl: 1,
+          proxied: false,
+        },
+      });
+    } catch (err) {
+      console.log(
+        "\n\n",
+        "❌",
+        "Error setting up this subdomain... For help, contact us at https://cdr.co/join-community"
+      );
+    }
+
+    console.log("wowawiwa");
+
+    // create our script
   } else if (argv.domainType == "cloud-dns") {
     console.log("Well, this is coming soon 💀");
     return 0;
