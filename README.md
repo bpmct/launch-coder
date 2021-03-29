@@ -16,6 +16,9 @@ Preferred environment: Google Cloud Shell. It just works.
 No need to install:
 
 ```sh
+# If you have never used GKE before:
+gcloud services enable container.googleapis.com
+
 # For a guided install:
 npx @bpmct/launch-coder
 
@@ -37,13 +40,21 @@ launch-coder will not install or provision anything without your permission :)
 
 ## Troubleshooting
 
-On non-public Dev URLs: `An internal server error occurred`: 
+On non-public Dev URLs: `An internal server error occurred`:
 
 - This is an error I get frequently with Dev URLs, GKE, and CloudFlare domains, and it always seems to go away.
   - Re-create Dev URL
   - Re create environment
   - Wait patiently
   - Last resort: Make Dev URL public
+
+`Customer should enable service:container.googleapis.com before proceeding`:
+
+- This is for brand new acounts accounts, the script will handle this in the future. For now, enable by typing:
+
+  ```sh
+  gcloud services enable container.googleapis.com
+  ```
 
 ---
 
