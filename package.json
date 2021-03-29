@@ -1,10 +1,8 @@
 {
-  "name": "auto-coder",
+  "name": "@bpmct/launch-coder",
   "version": "1.0.0",
-  "description": "",
   "main": "src/index.js",
   "bin": {
-    "@bpmct/launch-coder": "bin/launch-coder",
     "launch-coder": "bin/launch-coder"
   },
   "publishConfig": {
@@ -28,5 +26,14 @@
     "promisify-child-process": "^4.1.1",
     "yargs": "^16.2.0",
     "yargs-interactive": "^3.0.0"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bpmct/auto-coder.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bpmct/auto-coder/issues"
+  },
+  "homepage": "https://github.com/bpmct/auto-coder#readme",
+  "description": ""
 }
