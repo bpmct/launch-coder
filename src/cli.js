@@ -729,7 +729,17 @@ export async function cli(args) {
       );
     }
 
-    console.log("wowawiwa");
+    console.log(
+      "\n\n🎉 Coder has been installed! Log in at https://" + domainName
+    );
+    if (adminPassword == "") {
+      // TODO: auto reset it?
+      console.log(
+        "\nWe couldn't find your admin password. See the docs on how to reset it: https://coder.com/docs/admin/access-control/password-reset#resetting-the-site-admin-password"
+      );
+    } else {
+      console.log(adminPassword);
+    }
 
     // create our script
   } else if (argv.domainType == "cloud-dns") {
