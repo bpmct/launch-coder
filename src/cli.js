@@ -312,6 +312,7 @@ export async function cli(args) {
     ) {
       pricing_info =
         "This cluster will cost you roughly $40-120/mo to run on Google Cloud depending on usage." +
+        "\nQuestions about cluster size? Ask at https://cdr.co/join-community" +
         "\n\nNote: this is just an estimate, we recommend researching yourself and monitoring billing:";
     } else {
       pricing_info =
@@ -443,8 +444,12 @@ export async function cli(args) {
             value: "auto",
           },
           {
-            name: "A domain name I own on Google CloudDNS",
+            name: "A domain name I own on Google CloudDNS (Coming soon)",
             value: "cloud-dns",
+          },
+          {
+            name: "A domain name I own on CloudFlare (Coming soon)",
+            value: "cloudflare",
           },
           {
             name: "Do not set up a domain for now",
@@ -679,7 +684,7 @@ export async function cli(args) {
     console.log("\n⏳ Setting up the domain...");
 
     // fetch our admin password now, but save it for later
-    const adminPassword = await runHelperScript("getAdminPassword");
+    const loginDetails = await runHelperScript("getAdminPassword");
 
     const coderIP = await runHelperScript("getCoderIP").catch((err) => {
       console.log(
@@ -732,29 +737,107 @@ export async function cli(args) {
     console.log(
       "\n\n🎉 Coder has been installed! Log in at https://" + domainName
     );
-    if (adminPassword == "") {
-      // TODO: auto reset it?
+    if (loginDetails == "") {
+      // TODO: allow the user to reset from here
       console.log(
-        "\nWe couldn't find your admin password. See the docs on how to reset it: https://coder.com/docs/admin/access-control/password-reset#resetting-the-site-admin-password"
+        "\nWe couldn't find your admin password. See the docs on how to reset it: \n\t➡️ https://coder.com/docs/admin/access-control/password-reset#resetting-the-site-admin-password"
       );
     } else {
-      console.log(adminPassword);
+      console.log(loginDetails);
     }
 
     // create our script
-  } else if (argv.domainType == "cloud-dns") {
-    console.log("Well, this is coming soon 💀");
+  } else if (
+    argv.domainType == "cloud-dns" ||
+    argv.domainType == "cloudflare"
+  ) {
+    console.log(
+      "This is coming soon. For support doing this, join the community: https;//cdr.co/join-community"
+    );
     return 0;
   } else if (argv.domainType == "none") {
     console.log(
       "\nWarning: This means you can't use Coder with DevURLs, a primary way of accessing web services\ninside of a Coder Workspace:\n",
       "\t📄 Docs: https://coder.com/docs/environments/devurls\n",
-      "\t🌎 Alternative: https://ngrok.com/docs (you can nstall this in your images)\n\n"
+      "\t🌎 Alternative: https://ngrok.com/docs (you can install this in your images)\n\n"
     );
 
     console.log(
       "You can always add a domain later, and use a custom provider via our docs.\n"
     );
+
+    // TODO: definitely fix me!!
+    // very sad repeated code :(
+    // i wanted 2 working options
+    let installScript = await fs.readFile(
+      __dirname + "/../config-store/update-no-domain.sh",
+      "utf8"
+    );
+
+    // ensure we injected everything OK
+    if (installScript.includes("INJECT_")) {
+      console.log(
+        "❌",
+        "Information was not injected into the install script correctly. An error occured."
+      );
+      return;
+    }
+
+    try {
+      await fs.writeFile(argv.saveDir + "/update-coder.sh", installScript);
+      await fs.chmod(argv.saveDir + "/update-coder.sh", "755");
+    } catch (err) {
+      console.log("❌ An error occured writing the install script", err);
+    }
+
+    console.log(
+      "\n\n✅ Created an install/upgrade script that:\n",
+      "\t📊 Adds/updates the Coder helm chart\n",
+      `\t🚀 Installs/upgrades Coder\n\n` +
+        `💻 Preview it at: ${argv.saveDir}/update-coder.sh\n`
+    );
+
+    if (!argv.skipConfirmPrompts) {
+      const runCommand = await inquirer.prompt({
+        type: "confirm",
+        default: true,
+        name: "runIt",
+        message: "Do you want to run this command and install Coder?",
+      });
+
+      if (!runCommand.runIt) {
+        console.log(
+          `\n\nOk :) Feel free to modify the command as needed and run it yourself.`
+        );
+        return;
+      }
+    }
+
+    const subprocess = execa("/bin/sh", [argv.saveDir + "/update-coder.sh"]);
+    console.log("------------");
+
+    subprocess.stdout.pipe(process.stdout);
+    const { stdout } = await subprocess;
+    // TODO: consolidate the spacers
+    console.log("------------");
+
+    // fetch our admin password now
+    const loginDetails = await runHelperScript("getAdminPassword");
+
+    const coderIP = await runHelperScript("getCoderIP").catch((err) => {
+      console.log("Error fetching the IP address for your Coder deployment.");
+      return 1;
+    });
+
+    console.log("\n\n🎉 Coder has been installed! Log in at http://" + coderIP);
+    if (loginDetails == "") {
+      // TODO: auto reset it?
+      console.log(
+        "\nWe couldn't find your admin password. See the docs on how to reset it: https://coder.com/docs/admin/access-control/password-reset#resetting-the-site-admin-password"
+      );
+    } else {
+      console.log(loginDetails);
+    }
 
     // TODO: add confirmations
   } else {
