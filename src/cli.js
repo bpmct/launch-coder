@@ -855,5 +855,4 @@ export async function cli(args) {
 
   // TODO: tell the user they can save this to a PRIVATE
   // repo in GIT (maybe idk if that is bad practice)
-  console.log("\n\nat the end with a long argv:", Object.keys(argv).length);
 }
