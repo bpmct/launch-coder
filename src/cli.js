@@ -1,9 +1,12 @@
 const yargs = require("yargs/yargs");
 import inquirer from "inquirer";
+import { domain } from "process";
 import { exit } from "yargs";
 const { hideBin } = require("yargs/helpers");
-
 const execa = require("execa");
+
+// reading and writing in out/ folder
+const fs = require("fs");
 
 require("dotenv").config();
 
@@ -23,7 +26,9 @@ const runHelperScript = async (filename, params) => {
 };
 
 const generateGoogleClusterCommand = (argv) => {
-  return `$ gcloud beta container --project "${argv.gcloudProjectId}" \\
+  // TODO: omit zone if it is intentionally left blank to support regional clusters
+  // note: this will involve modifying other gcloud commands that mention --zone
+  return `gcloud beta container --project "${argv.gcloudProjectId}" \\
     clusters create "${argv.gcloudClusterName}" \\
     --zone "${argv.gcloudClusterZone}" \\
     --no-enable-basic-auth \\
@@ -38,20 +43,20 @@ const generateGoogleClusterCommand = (argv) => {
     --num-nodes "${argv.gcloudClusterMinNodes}" \\
     --enable-stackdriver-kubernetes \\
     --enable-ip-alias \\
-    --network "projects/$PROJECT_ID/global/networks/default" \\
-    --subnetwork "projects/$PROJECT_ID/regions/${
-      argv.gcloudClusterZone
-    }/subnetworks/default" \\
+    --network "projects/${argv.gcloudProjectId}/global/networks/default" \\
+    --subnetwork "projects/${argv.gcloudProjectId}/regions/${
+    argv.gcloudClusterRegion
+  }/subnetworks/default" \\
     --default-max-pods-per-node "110" \\
     --addons HorizontalPodAutoscaling,HttpLoadBalancing \\
     --enable-autoupgrade \\
     --enable-autorepair \\${
-      argv.gcloudClusterPreemtible ? "\n    --preemtible \\" : ""
+      argv.gcloudClusterPreemptible ? "\n    --preemptible \\" : ""
     }
     --enable-network-policy \\
     --enable-autoscaling \\
     --min-nodes "${argv.gcloudClusterMinNodes}" \\
-    --max-nodes "${argv.gcloudClusterMaxNodes}"`;
+    --max-nodes "${argv.gcloudClusterMaxNodes}"\n`;
 };
 
 export async function cli(args) {
@@ -60,6 +65,12 @@ export async function cli(args) {
       alias: "m",
       type: "string",
       description: "Method for deploying Coder (gcloud, general-k8s)",
+    })
+    .option("save-dir", {
+      alias: "f",
+      type: "string",
+      default: "~/.config/launch-coder",
+      description: "Path to save config files",
     })
     .option("domainType", {
       alias: "d",
@@ -86,6 +97,10 @@ export async function cli(args) {
       type: "string",
       default: "coder",
     })
+    .option("gcloud-cluster-region", {
+      type: "string",
+      default: "us-central1",
+    })
     .option("gcloud-cluster-zone", {
       type: "string",
       default: "us-central1-a",
@@ -94,7 +109,7 @@ export async function cli(args) {
       type: "string",
       default: "e2-highmem-4",
     })
-    .option("gcloud-cluster-preemtible", {
+    .option("gcloud-cluster-preemptible", {
       type: "boolean",
       default: true,
     })
@@ -110,8 +125,7 @@ export async function cli(args) {
       type: "number",
       default: 3,
     })
-    // TODO: determine better naming for this:
-    .option("gcloud-skip-confirm-prompt", {
+    .option("skip-confirm-prompts", {
       type: "boolean",
     }).argv;
 
@@ -147,7 +161,7 @@ export async function cli(args) {
             value: "gcloud",
           },
           {
-            name: "Install Coder on my current cluster (sketchy)",
+            name: "Install Coder on my current cluster",
             value: "k8s",
           },
         ],
@@ -245,12 +259,13 @@ export async function cli(args) {
     let pricing_info = "";
 
     if (
+      argv.gcloudClusterRegion == "us-central1" &&
       argv.gcloudClusterZone == "us-central1-a" &&
       argv.gcloudClusterMachineType == "e2-highmem-4" &&
       argv.gcloudClusterMinNodes == "1" &&
       argv.gcloudClusterMaxNodes == "3" &&
       argv.gcloudClusterAutoscaling &&
-      argv.gcloudClusterPreemtible
+      argv.gcloudClusterPreemptible
     ) {
       pricing_info =
         "This cluster will cost you roughly $40-120/mo to run on Google Cloud depending on usage." +
@@ -275,7 +290,7 @@ export async function cli(args) {
 
     // TODO: impliment ability to edit cluster command in the cli (wohoo)
 
-    if (!argv.gcloudSkipConfirmPrompt) {
+    if (!argv.skipConfirmPrompts) {
       const runCommand = await inquirer.prompt({
         type: "confirm",
         default: true,
@@ -291,17 +306,94 @@ export async function cli(args) {
       }
     }
 
-    const subprocess = execa("ping", ["google.com", "-c", "5"]);
-    subprocess.stdout.pipe(process.stdout);
-    const { stdout } = await subprocess;
-    console.log("WE KNOW THE PROCESS HAS COMPLETED");
+    // TODO: create different folders for each session
+    console.log(
+      "💾 FYI: All of these scripts are being saved in: " + argv.saveDir + "\n"
+    );
 
-    // execa("echo", ["unicorns"]).stdout.pipe(process.stdout);
-  } else if (argv.method == "k8s") {
-    console.log("coming sooon moo");
-  } else {
+    // switch to the absolute path of the home directory if the user included ~/
+    if (argv.saveDir.startsWith("~/")) {
+      const userHome = require("os").homedir();
+      argv.saveDir = argv.saveDir.replace("~/", userHome + "/");
+    }
+
+    // create our out/ file to hold our creation script, among other things
+    await execa("mkdir", ["-p", argv.saveDir]).catch((err) => {
+      console.log(err);
+    });
+
+    // git init (or re-init so the user can easily source-control)
+    await execa("git", ["init", argv.saveDir]);
+
+    // add our lovely script to the out folder
+    fs.writeFileSync(
+      argv.saveDir + "/createCluster.sh",
+      "#!/bin/sh\n" + gCloudCommand
+    );
+    await fs.chmodSync(argv.saveDir + "/createCluster.sh", "755");
+
+    console.log("\n⏳ Creating your cluster. This will take a few minutes...");
+
+    try {
+      const subprocess = execa("/bin/sh", [argv.saveDir + "/createCluster.sh"]);
+      subprocess.stdout.pipe(process.stdout);
+      const { stdout } = await subprocess;
+      console.log("------------");
+      console.log(
+        "✅",
+        `Cluster "${argv.gcloudClusterName}" has been created!`
+      );
+    } catch (err) {
+      console.log("❌", "Process failed\n\n\n", err.stderr);
+      return;
+    }
+
+    try {
+      await execa(
+        "gcloud",
+        `container clusters get-credentials ${argv.gcloudClusterName} --zone ${argv.gcloudClusterZone}`.split(
+          " "
+        )
+      );
+      console.log("✅", "Added to kube context");
+    } catch (err) {
+      console.log("❌", "Unable to add to kube context:\n\n\n", err.stderr);
+      return;
+    }
+
+    // So now we can move on to installing Coder!
+  }
+
+  // if argv.method == "gcloud" at this point
+  // the script has succeeded in creating the cluster
+  // and switched context
+  if (argv.method != "k8s" && argv.method != "gcloud") {
+    // TODO: standardize these
     console.error("Error. Unknown method: " + argv.method);
     return;
+  } else if (argv.method == "k8s") {
+    // TODO: add checks to ensure the user has a cluster,
+    // and it has the necessary stuff for Coder
+    console.log(
+      "This script does not currently verify that you cluster is ready for Coder yet.\n\nWe recommend checking the docs before continuing:"
+    );
+    console.log("\t➡️ https://coder.com/docs/setup/requirements");
+
+    if (!argv.skipConfirmPrompts) {
+      const runCommand = await inquirer.prompt({
+        type: "confirm",
+        default: true,
+        name: "runIt",
+        message: "Do you to proceed?",
+      });
+
+      if (!runCommand.runIt) {
+        console.log(
+          `\nExited. If you have any questions, feel free reach out on Slack:\n\t➡️ https://cdr.co/join-community\n`
+        );
+        return 0;
+      }
+    }
   }
 
   // determine which type of domain to use
@@ -314,16 +406,46 @@ export async function cli(args) {
         message: "What type of domain would you like to use?",
         choices: [
           {
-            name: `With a free domain from Coder (ex. [myname].${process.env.CLOUDFLARE_DOMAIN})`,
+            name: `A free domain from Coder (ex. [myname].${process.env.CLOUDFLARE_DOMAIN})`,
             value: "auto",
           },
           {
-            name: "With a domain name I own on Google CloudDNS",
+            name: "A domain name I own on Google CloudDNS",
             value: "cloud-dns",
+          },
+          {
+            name: "Do not set up a domain for now",
+            value: "none",
           },
         ],
       })),
     };
   }
+
+  // validate domainType
+  if (argv.domainType == "auto") {
+    console.log("AUTOMA");
+  } else if (argv.domainType == "cloud-dns") {
+    console.log("Well, this is coming soon 💀");
+  } else if (argv.domainType == "none") {
+    console.log(
+      "\nWarning: This means you can't use Coder with DevURLs, a primary way of accessing web services\ninside of a Coder Workspace:\n",
+      "\t📄 Docs: https://coder.com/docs/environments/devurls\n",
+      "\t🌎 Alternative: https://ngrok.com/docs (you can nstall this in your images)\n\n"
+    );
+
+    console.log(
+      "You can always add a domain later, and use a custom provider via our docs."
+    );
+
+    // TODO: add confirmations
+  } else {
+    // TODO: standardize these
+    console.error("Error. Unknown domainType: " + argv.domainType);
+    return;
+  }
+
+  // install and access Coder
+
   console.log("\n\nat the end with a long argv:", Object.keys(argv).length);
 }
