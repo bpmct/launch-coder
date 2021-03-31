@@ -16,9 +16,6 @@ Preferred environment: Google Cloud Shell. It just works.
 No need to install:
 
 ```sh
-# If you have never used GKE before:
-gcloud services enable container.googleapis.com
-
 # For a guided install:
 npx @bpmct/launch-coder
 
@@ -47,14 +44,6 @@ On non-public Dev URLs: `An internal server error occurred`:
   - Re create environment
   - Wait patiently
   - Last resort: Make Dev URL public
-
-`Customer should enable service:container.googleapis.com before proceeding`:
-
-- This is for brand new acounts accounts, the script will handle this in the future. For now, enable by typing:
-
-  ```sh
-  gcloud services enable container.googleapis.com
-  ```
 
 ---
 
