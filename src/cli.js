@@ -214,7 +214,10 @@ export async function cli(args) {
     // TODO: add better user education on what the prereqs are
     try {
       await runHelperScript("googleCloudPrereqs");
-      console.log("✅", "You seem to have all the dependencies installed!");
+      console.log(
+        "✅",
+        "You seem to have all the local dependencies installed!"
+      );
     } catch (err) {
       console.log("❌", err.stderr);
       return;
@@ -291,6 +294,45 @@ export async function cli(args) {
             ],
           })),
         };
+      }
+    }
+
+    // check if the kubernetes service is enabled in google cloud
+
+    const check_K8s = await runHelperScript("googleCloudK8sEnabled");
+
+    if (check_K8s && check_K8s != "true") {
+      if (!argv.skipConfirmPrompts) {
+        const runCommand = await inquirer.prompt({
+          type: "confirm",
+          default: true,
+          name: "runIt",
+          message:
+            "Kubernetes (container.googleapis.com) is not enabled on this Google Cloud project. Enable?",
+        });
+
+        if (!runCommand.runIt) {
+          console.log(
+            `\n\nOk :) Kubernetes is required to run Coder. You can manually enable it here:\n`,
+            "\t👉 https://console.cloud.google.com/marketplace/product/google/container.googleapis.com\n"
+          );
+          return;
+        }
+      }
+
+      try {
+        console.log(
+          "⏳",
+          "Enabling the Kubernetes service for this project..."
+        );
+        await execa("gcloud", [
+          "services",
+          "enable",
+          "container.googleapis.com",
+        ]);
+        console.log("✅", "Enabled the Google Cloud Kubernetes service\n\n");
+      } catch (err) {
+        console.log("❌", "Error enabling the Kubernetes service", err);
       }
     }
 
