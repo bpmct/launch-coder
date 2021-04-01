@@ -4,8 +4,8 @@
 
 
 SERVICE="container.googleapis.com"
-if [[ $(gcloud services list --format="value(serviceConfig.name)" \
-                            --filter="serviceConfig.name:$SERVICE" 2>&1) != \
+if [[ $(gcloud services list --format="value(config.name)" \
+                            --filter="config.name:$SERVICE" 2>&1) != \
                             "$SERVICE" ]]; then
 echo "false"
 else
