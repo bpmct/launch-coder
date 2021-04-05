@@ -13,7 +13,7 @@ Preferred environment: Google Cloud Shell. It just works.
 
 ## How to use
 
-No need to install:
+No need to install the CLI tool locally, run from NPM:
 
 ```sh
 # For a guided install:
