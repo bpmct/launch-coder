@@ -2,6 +2,8 @@
 
 ⚠️: This was a hackathon project and is not recommended for production deployments or in sensitive environments.
 
+This does not work for Coder v1.21+. Specify a --version flag
+
 ---
 
 Launch [Coder](https://coder.com) in a simple way. It can:
