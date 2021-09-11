@@ -1,1 +1,0 @@
-helm upgrade --namespace coder --install --atomic --wait coder coder/coder --values values.yaml
